@@ -2,11 +2,38 @@ import { Request, Response } from "express";
 import { OrderService } from "./order.service";
 import TOrderSchema from "./order.zod";
 
+import { ProductService } from "../product/product.service";
+
 const createOrder = async (req: Request, res: Response) => {
   try {
     const orderData = req.body;
-    //ZOD VALIDATION
+    const { productId, quantity } = orderData;
+
     const zodUserDAta = TOrderSchema.parse(orderData);
+
+    const product = await ProductService.getSingleProductFromDb(productId);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "order Not found",
+      });
+    }
+
+    if (product.inventory.quantity < quantity) {
+      return res.status(404).json({
+        success: false,
+        message: "Insufficient quantity available in inventory",
+      });
+    }
+    //update the inventory and inStock
+    product.inventory.quantity -= quantity;
+    if (product.inventory.quantity === 0) {
+      product.inventory.inStock = false;
+    }
+    //update product database
+    await ProductService.updateSingleProductIntoDb(productId, product);
+
     const result = await OrderService.createOrderIntoDb(zodUserDAta);
 
     res.status(200).json({
